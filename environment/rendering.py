@@ -7,20 +7,20 @@ grid_size = 10
 cell_size = 70
 window_size = grid_size * cell_size
 
-# Updated colors
+# Medical Drone Theme Colors
 colors = {
-    'bg': (10, 10, 40),
-    'grid': (55, 90, 140),
-    'patient_normal': (0, 200, 120),
-    'patient_stroke': (255, 80, 80),
-    'drone': (255, 215, 0),
+    'bg': (245, 245, 250),           # Light gray
+    'grid': (200, 210, 230),         # Soft blue
+    'patient_normal': (0, 180, 90),  # Green
+    'patient_stroke': (230, 20, 20), # Red
+    'drone': (0, 110, 240)           # Medical blue
 }
 
 def draw_grid(surface):
     for x in range(grid_size):
         for y in range(grid_size):
             rect = pygame.Rect(x*cell_size, y*cell_size, cell_size, cell_size)
-            pygame.draw.rect(surface, colors['grid'], rect, 2, border_radius=8)
+            pygame.draw.rect(surface, colors['grid'], rect, 2, border_radius=5)
 
 def draw_patient(surface, patient_pos, stroke):
     patient_color = colors['patient_stroke'] if stroke else colors['patient_normal']
@@ -29,13 +29,18 @@ def draw_patient(surface, patient_pos, stroke):
 
 def draw_drone(surface, drone_pos):
     drone_pos_pix = ((drone_pos + 0.5) * cell_size).astype(int)
-    pygame.draw.rect(surface, colors['drone'], (*drone_pos_pix - cell_size//4, cell_size//2, cell_size//2), border_radius=10)
-    
-    # Draw rotors
-    for angle in [45, 135, 225, 315]:
-        offset = np.array([np.cos(np.radians(angle)), np.sin(np.radians(angle))]) * cell_size//2.5
-        rotor_pos = drone_pos_pix + offset.astype(int)
-        pygame.draw.circle(surface, colors['drone'], rotor_pos, cell_size//10)
+
+    # Draw central body
+    body_size = cell_size // 3
+    pygame.draw.rect(surface, colors['drone'],
+                     (*drone_pos_pix - body_size//2, body_size, body_size), border_radius=5)
+
+    # Draw quadcopter rotors
+    rotor_radius = cell_size // 8
+    offset = body_size
+    for dx, dy in [(-offset, -offset), (offset, -offset), (-offset, offset), (offset, offset)]:
+        rotor_pos = drone_pos_pix + np.array([dx, dy])
+        pygame.draw.circle(surface, colors['drone'], rotor_pos, rotor_radius)
 
 def visualize_environment(steps=100):
     pygame.init()

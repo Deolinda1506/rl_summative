@@ -3,14 +3,14 @@ from gymnasium import spaces
 import numpy as np
 import pygame
 
-# Updated colors
+# Medical Drone Theme Colors
 colors = {
-    'bg': (10, 10, 40),
-    'grid': (55, 90, 140),
-    'patient_normal': (0, 200, 120),
-    'patient_stroke': (255, 80, 80),
-    'drone': (255, 215, 0),  
-
+    'bg': (245, 245, 250),           # Light gray background
+    'grid': (200, 210, 230),         # Soft blue grid
+    'patient_normal': (0, 180, 90),  # Green
+    'patient_stroke': (230, 20, 20), # Red
+    'drone': (0, 110, 240)           # Medical blue
+}
 
 class StrokeDetectionEnv(gym.Env):
     """Custom Gym environment for drone-based stroke detection."""
@@ -18,13 +18,12 @@ class StrokeDetectionEnv(gym.Env):
 
     def __init__(self, render_mode=None):
         super().__init__()
-
-        # Grid and agent settings
         self.grid_size = 10
         self.drone_pos = np.array([5, 5])
         self.patient_pos = np.random.randint(0, self.grid_size, size=2)
         self.stroke = False
         self.time_step = 0
+        self.zoom = 1
 
         # Action space: 0-left, 1-right, 2-up, 3-down, 4-zoom_in, 5-zoom_out
         self.action_space = spaces.Discrete(6)
@@ -34,11 +33,10 @@ class StrokeDetectionEnv(gym.Env):
             low=0, high=self.grid_size-1, shape=(5,), dtype=np.float32
         )
 
-        # Rendering
         self.render_mode = render_mode
         self.window_size = 700
         self.cell_size = self.window_size // self.grid_size
-        self.zoom = 1
+
         if render_mode == "rgb_array":
             pygame.init()
             self.window = pygame.Surface((self.window_size, self.window_size))
@@ -72,23 +70,23 @@ class StrokeDetectionEnv(gym.Env):
         # Random stroke event (5% chance)
         self.stroke = np.random.rand() < 0.05
 
-        # Drone actions
-        if action == 0:
+        # Drone movement
+        if action == 0:  # left
             self.drone_pos[0] -= 1
-        elif action == 1:
+        elif action == 1:  # right
             self.drone_pos[0] += 1
-        elif action == 2:
+        elif action == 2:  # up
             self.drone_pos[1] -= 1
-        elif action == 3:
+        elif action == 3:  # down
             self.drone_pos[1] += 1
-        elif action == 4:
+        elif action == 4:  # zoom in
             self.zoom = min(self.zoom + 1, 5)
-        elif action == 5:
+        elif action == 5:  # zoom out
             self.zoom = max(self.zoom - 1, 1)
 
         self.drone_pos = np.clip(self.drone_pos, 0, self.grid_size-1)
 
-        # Reward for detecting stroke
+        # Reward rules
         if self.stroke and np.array_equal(self.drone_pos, self.patient_pos):
             reward += 10
         elif self.stroke and not np.array_equal(self.drone_pos, self.patient_pos):
@@ -111,23 +109,27 @@ class StrokeDetectionEnv(gym.Env):
                 for y in range(self.grid_size):
                     rect = pygame.Rect(x*self.cell_size, y*self.cell_size,
                                        self.cell_size, self.cell_size)
-                    pygame.draw.rect(self.window, colors['grid'], rect, 2, border_radius=8)
+                    pygame.draw.rect(self.window, colors['grid'], rect, 2, border_radius=5)
 
             # Draw patient
             patient_color = colors['patient_stroke'] if self.stroke else colors['patient_normal']
             patient_pix = ((self.patient_pos + 0.5) * self.cell_size).astype(int)
             pygame.draw.circle(self.window, patient_color, patient_pix, self.cell_size//3)
 
-            # Draw drone
+            # Draw drone (quadcopter)
             drone_pix = ((self.drone_pos + 0.5) * self.cell_size).astype(int)
+            body_size = self.cell_size // 3
             pygame.draw.rect(self.window, colors['drone'],
-                             (*drone_pix - self.cell_size//4, self.cell_size//2, self.cell_size//2), border_radius=10)
+                             (*drone_pix - body_size//2, body_size, body_size), border_radius=5)
 
-            for angle in [45, 135, 225, 315]:
-                offset = np.array([np.cos(np.radians(angle)), np.sin(np.radians(angle))]) * self.cell_size//2.5
-                rotor_pix = drone_pix + offset.astype(int)
-                pygame.draw.circle(self.window, colors['drone'], rotor_pix, self.cell_size//10)
+            # Rotors
+            rotor_radius = self.cell_size // 8
+            offset = body_size
+            for dx, dy in [(-offset, -offset), (offset, -offset), (-offset, offset), (offset, offset)]:
+                rotor_pos = drone_pix + np.array([dx, dy])
+                pygame.draw.circle(self.window, colors['drone'], rotor_pos, rotor_radius)
 
+            # Return image array
             return np.transpose(pygame.surfarray.array3d(self.window), (1, 0, 2))
 
     def close(self):
