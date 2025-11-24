@@ -1,93 +1,84 @@
-# training/pg_training.py
+# training/train_ppo.py
 
 import os
-import itertools
-import pandas as pd
+import csv
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.callbacks import BaseCallback
+from training.CustomLogger import StrokeLoggerCallback
 from environment.custom_env import StrokeDetectionEnv
-
-# Callback for console logging
-class StrokeLoggerCallback(BaseCallback):
-    def __init__(self, verbose=1):
-        super().__init__(verbose)
-
-    def _on_step(self) -> bool:
-        return True
 
 # Create directories
 os.makedirs("models/pg", exist_ok=True)
-os.makedirs("logs/pg", exist_ok=True)
+os.makedirs("logs", exist_ok=True)
 
-# Hyperparameter grid
-learning_rates = [1e-4, 3e-4, 5e-4]
-gammas = [0.9, 0.95, 0.99]
-n_steps_list = [512, 1024, 2048]
-batch_sizes = [32, 64]
+CSV_PATH = "logs/ppo_hyperparams.csv"
 
-# Store results
-results = []
+# Define 10 hyperparameter configurations
+ppo_configs = [
+    {"learning_rate": 0.0003, "gamma": 0.99, "n_steps": 1024, "batch_size": 32},
+    {"learning_rate": 0.0001, "gamma": 0.98, "n_steps": 512, "batch_size": 64},
+    {"learning_rate": 0.0005, "gamma": 0.95, "n_steps": 2048, "batch_size": 32},
+    {"learning_rate": 0.0007, "gamma": 0.97, "n_steps": 1024, "batch_size": 128},
+    {"learning_rate": 0.0003, "gamma": 0.99, "n_steps": 2048, "batch_size": 64},
+    {"learning_rate": 0.0001, "gamma": 0.99, "n_steps": 4096, "batch_size": 32},
+    {"learning_rate": 0.0002, "gamma": 0.96, "n_steps": 2048, "batch_size": 128},
+    {"learning_rate": 0.0005, "gamma": 0.98, "n_steps": 512, "batch_size": 32},
+    {"learning_rate": 0.0003, "gamma": 0.97, "n_steps": 1024, "batch_size": 64},
+    {"learning_rate": 0.00005, "gamma": 0.99, "n_steps": 4096, "batch_size": 16},
+]
 
-# Environment factory
-def make_env():
-    return DummyVecEnv([lambda: Monitor(StrokeDetectionEnv())])
+# Create CSV if not exists
+if not os.path.exists(CSV_PATH):
+    with open(CSV_PATH, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["run_id", "learning_rate", "gamma", "n_steps", "batch_size", "total_reward"])
 
-# Hyperparameter tuning loop
-for lr, gamma, n_steps, batch_size in itertools.product(
-    learning_rates, gammas, n_steps_list, batch_sizes
-):
-    model_name = f"ppo_lr{lr}_gamma{gamma}_n{n_steps}_bs{batch_size}"
-    print(f"\n=== Training {model_name} ===")
+# Training loop for 10 variants
+for i, cfg in enumerate(ppo_configs):
+    run_id = i + 1
+    print(f"\n Starting PPO Training Run {run_id}/10 with params: {cfg}")
 
-    # Create environment
-    env = make_env()
-    
-    # Create PPO model
+    # Environment
+    env = DummyVecEnv([lambda: Monitor(StrokeDetectionEnv())])
+    logger_callback = StrokeLoggerCallback(verbose=0)
+
+    # Create model
     model = PPO(
         "MlpPolicy",
         env,
         verbose=1,
-        learning_rate=lr,
-        gamma=gamma,
-        n_steps=n_steps,
-        batch_size=batch_size
+        learning_rate=cfg["learning_rate"],
+        gamma=cfg["gamma"],
+        n_steps=cfg["n_steps"],
+        batch_size=cfg["batch_size"]
     )
 
-    # Train model
-    model.learn(total_timesteps=50000, callback=StrokeLoggerCallback())
-    
+    # Train
+    model.learn(total_timesteps=50000, callback=logger_callback)
+
     # Save model
-    model_path = f"models/pg/{model_name}.zip"
-    model.save(model_path)
-    print(f"Model saved at {model_path}")
+    save_path = f"models/pg/run_{run_id}"
+    os.makedirs(save_path, exist_ok=True)
+    model.save(f"{save_path}/ppo_model")
 
-    # Evaluate model
-    obs = env.reset()
-    total_reward = 0
-    for step in range(200):
-        action, _ = model.predict(obs, deterministic=True)
-        obs, reward, done, info = env.step(action)  # DummyVecEnv returns 4 items
-        total_reward += reward[0]  # reward is an array
-        if done[0]:
-            break
+    # Retrieve total reward from logger
+    total_reward = sum(logger_callback.episode_rewards)  # fixed
 
-    print(f"Total reward after evaluation: {total_reward:.2f}")
-
-    # Record results
-    results.append({
-        "model": model_name,
-        "learning_rate": lr,
-        "gamma": gamma,
-        "n_steps": n_steps,
-        "batch_size": batch_size,
-        "total_reward": total_reward
-    })
+    # Log hyperparameters + reward
+    with open(CSV_PATH, "a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            run_id,
+            cfg["learning_rate"],
+            cfg["gamma"],
+            cfg["n_steps"],
+            cfg["batch_size"],
+            total_reward
+        ])
 
     env.close()
 
-# Save all results to CSV
-results_df = pd.DataFrame(results)
-results_df.to_csv("logs/pg/hyperparam_results.csv", index=False)
-print("All hyperparameter tuning results saved at logs/pg/hyperparam_results.csv")
+    print(f" Run {run_id} complete. Model saved to {save_path}/ppo_model")
+
+print("\n PPO hyperparameter search completed! Logs saved to logs/ppo_hyperparams.csv")

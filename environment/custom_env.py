@@ -101,6 +101,7 @@ class StrokeDetectionEnv(gym.Env):
         if self.render_mode == "human":
             print(f"Step:{self.time_step}, Drone:{self.drone_pos}, "
                   f"Patient:{self.patient_pos}, Stroke:{self.stroke}")
+
         elif self.render_mode == "rgb_array":
             self.window.fill(colors['bg'])
 
@@ -116,21 +117,27 @@ class StrokeDetectionEnv(gym.Env):
             patient_pix = ((self.patient_pos + 0.5) * self.cell_size).astype(int)
             pygame.draw.circle(self.window, patient_color, patient_pix, self.cell_size//3)
 
-            # Draw drone (quadcopter)
+            # Draw drone body
             drone_pix = ((self.drone_pos + 0.5) * self.cell_size).astype(int)
             body_size = self.cell_size // 3
             pygame.draw.rect(self.window, colors['drone'],
                              (*drone_pix - body_size//2, body_size, body_size), border_radius=5)
 
-            # Rotors
+            # Draw drone arms
+            arm_length = self.cell_size // 2
+            offsets = [(-arm_length, 0), (arm_length, 0), (0, -arm_length), (0, arm_length)]
+            for dx, dy in offsets:
+                pygame.draw.line(self.window, colors['drone'],
+                                 drone_pix, drone_pix + np.array([dx, dy]), 3)
+
+            # Draw rotors at arm ends
             rotor_radius = self.cell_size // 8
-            offset = body_size
-            for dx, dy in [(-offset, -offset), (offset, -offset), (-offset, offset), (offset, offset)]:
+            for dx, dy in offsets:
                 rotor_pos = drone_pix + np.array([dx, dy])
                 pygame.draw.circle(self.window, colors['drone'], rotor_pos, rotor_radius)
 
-            # Return image array
             return np.transpose(pygame.surfarray.array3d(self.window), (1, 0, 2))
 
     def close(self):
         pygame.quit()
+

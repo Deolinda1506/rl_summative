@@ -2,11 +2,6 @@ import pygame
 import numpy as np
 import imageio
 
-# Grid settings
-grid_size = 10
-cell_size = 70
-window_size = grid_size * cell_size
-
 # Medical Drone Theme Colors
 colors = {
     'bg': (245, 245, 250),           # Light gray
@@ -16,18 +11,18 @@ colors = {
     'drone': (0, 110, 240)           # Medical blue
 }
 
-def draw_grid(surface):
+def draw_grid(surface, grid_size, cell_size):
     for x in range(grid_size):
         for y in range(grid_size):
             rect = pygame.Rect(x*cell_size, y*cell_size, cell_size, cell_size)
             pygame.draw.rect(surface, colors['grid'], rect, 2, border_radius=5)
 
-def draw_patient(surface, patient_pos, stroke):
+def draw_patient(surface, patient_pos, stroke, cell_size):
     patient_color = colors['patient_stroke'] if stroke else colors['patient_normal']
     patient_pos_pix = ((patient_pos + 0.5) * cell_size).astype(int)
     pygame.draw.circle(surface, patient_color, patient_pos_pix, cell_size//3)
 
-def draw_drone(surface, drone_pos):
+def draw_drone(surface, drone_pos, cell_size):
     drone_pos_pix = ((drone_pos + 0.5) * cell_size).astype(int)
 
     # Draw central body
@@ -42,14 +37,22 @@ def draw_drone(surface, drone_pos):
         rotor_pos = drone_pos_pix + np.array([dx, dy])
         pygame.draw.circle(surface, colors['drone'], rotor_pos, rotor_radius)
 
-def visualize_environment(steps=100):
+def visualize_environment(
+    grid_size=10,
+    cell_size=70,
+    steps=100,
+    drone_start=None,
+    patient_start=None,
+    filename='stroke_env_simulation.gif'
+):
+    window_size = grid_size * cell_size
     pygame.init()
     surface = pygame.Surface((window_size, window_size))
     frames = []
 
     # Initialize positions
-    drone_pos = np.array([5, 5])
-    patient_pos = np.array([4, 6])
+    drone_pos = np.array(drone_start if drone_start is not None else [grid_size//2, grid_size//2])
+    patient_pos = np.array(patient_start if patient_start is not None else [grid_size//2-1, grid_size//2+1])
 
     for _ in range(steps):
         stroke = np.random.rand() < 0.05
@@ -62,18 +65,19 @@ def visualize_environment(steps=100):
 
         # Draw everything
         surface.fill(colors['bg'])
-        draw_grid(surface)
-        draw_patient(surface, patient_pos, stroke)
-        draw_drone(surface, drone_pos)
+        draw_grid(surface, grid_size, cell_size)
+        draw_patient(surface, patient_pos, stroke, cell_size)
+        draw_drone(surface, drone_pos, cell_size)
 
         # Capture frame
         frame = pygame.surfarray.array3d(surface)
         frames.append(np.transpose(frame, (1, 0, 2)))
 
     # Save as GIF
-    imageio.mimsave('stroke_env_simulation.gif', frames, duration=0.1)
+    imageio.mimsave(filename, frames, duration=0.1)
     pygame.quit()
-    print("GIF saved as 'stroke_env_simulation.gif'")
+    print(f"GIF saved as '{filename}'")
 
 if __name__ == "__main__":
-    visualize_environment()
+    # Example usage
+    visualize_environment(grid_size=10, cell_size=70, steps=100, filename='stroke_env_demo.gif')
